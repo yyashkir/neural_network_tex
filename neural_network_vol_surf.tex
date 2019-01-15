@@ -38,7 +38,56 @@
 
 \section{Introduction}
 
-Implied volatility surface \citep{hjm} is used for pricing vanilla options given price/strike ratio and time to maturity;
+Implied volatility surface \citep{hjm} is used for pricing vanilla options given price/strike ratio $S/K$ and time to maturity $\tau$. As an example, consider a call option according to Black-Scholes model:
+\begin{align}
+\label{BS}
+C_t &=S_t \cdot N(d_1)-K\cdot e^{-r \tau}\cdot N(d_2) \\
+d_1&=\frac{\log \frac{S_t}{K} + (r+ \nicefrac{1}{2}\sigma^2) \cdot \tau    }{\sigma \sqrt{\tau}} \\
+d_2&=d_1 - \sigma \sqrt{\tau}
+\end{align}
+To simplify historical data usage we introduce the "discounted" strike price
+\begin{equation}
+\kappa = K \cdot e^{-r \tau}
+\end{equation}
+which transforms equation (\ref{BS}) into:
+\begin{align}
+\label{BSm}
+C_t &=S_t \cdot N(d_1)- \kappa \cdot N(d_2) \\
+d_1&=\frac{\log \frac{S_t}{\kappa} + \nicefrac{1}{2}\cdot \sigma^2 \cdot \tau    }{\sigma \sqrt{\tau}} \\
+d_2&=d_1 - \sigma \sqrt{\tau}
+\end{align}
+It is common practice to quote the option price in terms of implied volatility $\sigma$. Therefore, the raw market data has the following format
+\begin{table}[H] 
+\title{Historical data: \\} 
+\label{rawdata}
+\begin{tabular}{ |llll|}
+\hline
+Date & Strike  & Time-to-maturity & Implied volatility  \\
+\hline
+$t_0$ & $\kappa_0$  & $\tau_0$ & $\sigma_0$  \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+$t_{i-1}$  & $\kappa_{i-1}$  & $\tau_{i-1}$ & $\sigma_{i-1}$  \\
+$t_{i}$  & $\kappa_i$  & $\tau_i$ & $\sigma_i$ \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+\hline
+\end{tabular}
+\end{table}
+Using historical raw data we construct the data block for the model training as follows:
+\begin{table}[H] 
+\title{Training data\\} 
+\label{trdata}
+\begin{tabular}{ |llll|}
+\hline
+$\kappa_0$  & $\tau_0$ & $\sigma_0$ &  $\sigma_1$  \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+$\kappa_{i}$  & $\tau_{i}$ & $\sigma_{i-1}$ & $\sigma_{i}$ \\
+$\kappa_{i+1}$  & $\tau_{i+1}$ & $\sigma_{i}$ & $\sigma_{i+1}$ \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+\hline
+\end{tabular}
+\end{table}
+In short, the $i^{th}$ sample is: $\vec x_i = \{ \kappa_{i},\tau_{i},\sigma_{i-1},\sigma_{i}   \}$. Note that we included the price (implied volatility) of the previous date in order to account for day-to-day correlation.
+
 
 \section{The problem formulation}\label{hjm}
 Given historical data (option price, spot price, strike price, time to maturity) for certain period of time, to build a model for implied volatility as function of spot/strike ratio $\kappa$ and time to maturity $T$. File with historical data in general case can be formatted as follows:
