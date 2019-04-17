@@ -38,7 +38,56 @@
 
 \section{Introduction}
 
-Implied volatility surface \citep{hjm} is used for pricing vanilla options given price/strike ratio and time to maturity;
+Implied volatility surface \citep{hjm} is used for pricing vanilla options given price/strike ratio $S/K$ and time to maturity $\tau$. As an example, consider a call option according to Black-Scholes model:
+\begin{align}
+\label{BS}
+C_t &=S_t \cdot N(d_1)-K\cdot e^{-r \tau}\cdot N(d_2) \\
+d_1&=\frac{\log \frac{S_t}{K} + (r+ \nicefrac{1}{2}\sigma^2) \cdot \tau    }{\sigma \sqrt{\tau}} \\
+d_2&=d_1 - \sigma \sqrt{\tau}
+\end{align}
+To simplify historical data usage we introduce the "discounted" strike price
+\begin{equation}
+\kappa = K \cdot e^{-r \tau}
+\end{equation}
+which transforms equation (\ref{BS}) into:
+\begin{align}
+\label{BSm}
+C_t &=S_t \cdot N(d_1)- \kappa \cdot N(d_2) \\
+d_1&=\frac{\log \frac{S_t}{\kappa} + \nicefrac{1}{2}\cdot \sigma^2 \cdot \tau    }{\sigma \sqrt{\tau}} \\
+d_2&=d_1 - \sigma \sqrt{\tau}
+\end{align}
+It is common practice to quote the option price in terms of implied volatility $\sigma$. Therefore, the raw market data has the following format
+\begin{table}[H] 
+\title{Historical data: \\} 
+\label{rawdata}
+\begin{tabular}{ |llll|}
+\hline
+Date & Strike  & Time-to-maturity & Implied volatility  \\
+\hline
+$t_0$ & $\kappa_0$  & $\tau_0$ & $\sigma_0$  \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+$t_{i-1}$  & $\kappa_{i-1}$  & $\tau_{i-1}$ & $\sigma_{i-1}$  \\
+$t_{i}$  & $\kappa_i$  & $\tau_i$ & $\sigma_i$ \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+\hline
+\end{tabular}
+\end{table}
+Using historical raw data we construct the data block for the model training as follows:
+\begin{table}[H] 
+\title{Training data\\} 
+\label{trdata}
+\begin{tabular}{ |llll|}
+\hline
+$\kappa_0$  & $\tau_0$ & $\sigma_0$ &  $\sigma_1$  \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+$\kappa_{i}$  & $\tau_{i}$ & $\sigma_{i-1}$ & $\sigma_{i}$ \\
+$\kappa_{i+1}$  & $\tau_{i+1}$ & $\sigma_{i}$ & $\sigma_{i+1}$ \\
+$\cdots$ & $\cdots$ & $\cdots$ & $\cdots$ \\
+\hline
+\end{tabular}
+\end{table}
+In short, the $i^{th}$ sample is: $\vec x_i = \{ \kappa_{i},\tau_{i},\sigma_{i-1},\sigma_{i}   \}$. Note that we included the price (implied volatility) of the previous date in order to account for day-to-day correlation.
+
 
 \section{The problem formulation}\label{hjm}
 Given historical data (option price, spot price, strike price, time to maturity) for certain period of time, to build a model for implied volatility as function of spot/strike ratio $\kappa$ and time to maturity $T$. File with historical data in general case can be formatted as follows:
@@ -70,9 +119,9 @@ Output signals from nodes (neurons) of the layer $(l-1)$ are combined as biased 
  \label{zab}
 z_{nlj} = \sum_{k=0}^{J-1} a_{n,l-1,k}w_{lkj} + b_{lj}
 \end{equation}
-(Note: within sample $n$ the vector/matrix form would be $\vec{z}_n^l = \vec{a}_n^{l-1}\textbf{w}_l + \vec {b}_l$. 
+(Note: within sample $n$ the vector/matrix form would be $\vec{z}_{nl} = \vec{a}_{n,l-1}\textbf{w}_l + \vec {b}_l$. 
 Weight matrices $\textbf{w}_l$ and biases $\vec {b}_l$ will be found as a result of the neural network iterative "training".)\\
-The output of the $j^{th}$-neuron of the layer $l$ is emitted as nonlinear transformation of  $\vec{z}_n^l $ 
+The output of the $j^{th}$-neuron of the layer $l$ is emitted as nonlinear transformation of  $\vec{z}_{n,l} $ 
 \begin{equation}
 \label{a_out}
 a_{nlj} = \sigma(z_{nlj})
@@ -102,290 +151,103 @@ The minimum of the error function can be found using gradient descent algorithm 
 \subsection{Backpropagation}
 \begin{enumerate}
 \item Output layer ($L-1$). \\
-Derivatives by weighted averages $z_{n,j,L-1}$
+Derivatives by weighted averages $z_{n,L-1,j}$
 \begin{align}
-\delta_{n,j,L-1} = \frac{\partial E}{\partial z_{n,j,L-1}} &= \frac{\partial E}{\partial a_{n,j,L-1}} \cdot \frac{\partial a_{n,j,L-1}}{\partial z_{n,j,L-1}} 
-=  \frac{\partial E}{\partial a_{n,j,L-1}} \cdot \frac{\partial \sigma(z_{n,j,L-1})}{\partial z_{n,j,L-1}} \\
-\text{where}\\
-\frac{\partial E}{\partial a_{n,j,L-1}} &= \frac{\partial }{\partial a_{n,j,L-1}} 
-\left[ \frac{1}{2}\sum_k \left( a_{n,k,L-1} - y_{nk}  \right)^2    \right] = a_{n,j,L-1} - y_{nj}\\
-\frac{\partial \sigma(z_{n,j,L-1})}{\partial z_{n,j,L-1}} &\equiv \sigma^{'}(z_{n,j,L-1})  
+\delta_{n,L-1,j} = \frac{\partial E}{\partial z_{n,L-1,j}} &= \frac{\partial E}{\partial a_{n,L-1,j}} \cdot \frac{\partial a_{n,L-1,j}}{\partial z_{n,L-1,j}} 
+=  \frac{\partial E}{\partial a_{n,L-1,j}} \cdot \frac{\partial \sigma(z_{n,L-1,j})}{\partial z_{n,L-1,j}} \\
+\nonumber \text{where}\\
+\frac{\partial E}{\partial a_{n,L-1,j}} &= \frac{\partial }{\partial a_{n,L-1,j}} 
+\left[ \frac{1}{2}\sum_k \left( a_{n,L-1,k} - y_{nk}  \right)^2    \right] = a_{n,L-1,j} - y_{nj}\\
+\frac{\partial \sigma(z_{n,L-1,j})}{\partial z_{n,L-1,j}} &\equiv \sigma^{'}(z_{n,L-1,j}) \\
+\nonumber \text{where}\\
+ \sigma^{'}(z) &= \sigma(z)(1- \sigma(z))
 \end{align} 
 
 \item Hidden layers ($l=L-2,\cdots,1$); backpropagation:
 \begin{align}
-\delta_{n,j,l} &= \frac{\partial E}{\partial z_{njl}} = \sum_k \frac{\partial E}{\partial z_{n,k,l+1}} \frac{\partial z_{n,k,l+1}}{\partial z_{n,j,l}} = \sum_k \delta_{n,k,l+1} \frac{\partial }{\partial z_{njl}} \left( \sum_i a_{nil} w_{i,k,l+1}+b_{k,l+1} \right) \\
-&=\sum_k \delta_{n,k,l+1} \frac{\partial }{\partial z_{njl}} \left( \sum_i \sigma(z_{nil}) w_{i,k,l+1}+b_{k,l+1} \right)=\sum_k \delta_{n,k,l+1} w_{j,k,l+1} \sigma^{'}(z_{njl})
+\delta_{n,l,j} &= \frac{\partial E}{\partial z_{nlj}} = \sum_k \frac{\partial E}{\partial z_{n,l+1,k}} \frac{\partial z_{n,l+1,k}}{\partial z_{n,l,j}} = \sum_k \delta_{n,l+1,k} \frac{\partial }{\partial z_{nlj}} \left( \sum_i a_{nli} w_{i,l+1,k}+b_{l+1,k} \right) \\
+&=\sum_k \delta_{n,l+1,k} \frac{\partial }{\partial z_{nlj}} \left( \sum_i \sigma(z_{nli}) w_{i,l+1,k}+b_{l+1,k} \right)=\sum_k \delta_{n,l+1,k} w_{j,l+1,k} \sigma^{'}(z_{nlj})
 \end{align}
 \item Derivatives by bias variables $\vec {b}_l \quad (l=L-1, \ldots 1)$:
 \begin{align}
-&\frac{\partial E}{\partial b_{jl}}=\frac{\partial E}{\partial a_{njl}} \frac{\partial a_{njl}}{\partial z_{njl}}\frac{\partial z_{njl}}{\partial b_{jl}}=\delta_{njl} \quad\text{(for a single sample n)} \\
-\beta_{jl}&=\frac{1}{N}\sum_{n=0}^{N-1}\delta_{njl} \quad\text{(averaged over all samples)}
+&\frac{\partial E}{\partial b_{lj}}=\frac{\partial E}{\partial a_{nlj}} \frac{\partial a_{nlj}}{\partial z_{nlj}}\frac{\partial z_{nlj}}{\partial b_{lj}}=\delta_{nlj} \quad\text{(for a single sample n)} \\
+\beta_{lj}&=\frac{1}{N}\sum_{n=0}^{N-1}\delta_{nlj} \quad\text{(averaged over all samples)}
 \end{align}
 \item Derivatives by weight matrix components:
 \begin{align}
 &\text{Partial derivative within n-th sample:}\\
 \label{der_n}
-&\frac{\partial E}{\partial w_{kjl}} =\frac{\partial E}{\partial z_{njl}} \frac{\partial z_{njl}}{\partial w_{kjl}}
-=\delta_{njl}\frac{\partial }{\partial w_{kjl}} \left(  \sum_i a_{n,i,l-1}+b_{jl}  \right)=\delta_{njl}a_{n,k,l-1} \\
+&\frac{\partial E}{\partial w_{lkj}} =\frac{\partial E}{\partial z_{nlj}} \frac{\partial z_{nlj}}{\partial w_{lkj}}
+=\delta_{nlj}\frac{\partial }{\partial w_{lkj}} \left(  \sum_i a_{n,l-1,i}+b_{lj}  \right)=\delta_{nlj}a_{n,l-1,k} \\
 &\text{Derivative (\ref{der_n}) averaged over all samples:}\\
 \label{der_N}
-v_{k,j,l} &= \frac{1}{N}\sum_{n=0}^{N-1} \delta_{njl}a_{n,k,l-1} 
+v_{lkj} &= \frac{1}{N}\sum_{n=0}^{N-1} \delta_{nlj}a_{n,l-1,k} 
 \end{align}
-\item Gradient descent step
+\item Gradient descent step:
+\begin{align}
+ w_{lkj}&= w_{lkj} - h \cdot v_{lkj} \\
+ b_{lj} &= b_{lj} - h \cdot \beta_{lj}
+\end{align}
+Where $h$ is the iteration step (learning rate)
 \end{enumerate}
 
-
-\begin{equation}
-\frac{dB(t,T)}{B(t,T)}=r(t)dt+\sum\limits_{p=0}^{2} \sigma_p(t,T)dW_p (t)
-\end{equation} 
-where $T$ is the bond maturity, $\sigma_p$ represents the bond price volatility of the stochastic driver number $p$, and $\vec {dW}(t)$ is a 3-tier Wiener process.
-\subsection{Bond prices expressed through the stochastic integral}
-Let $G(B)= \ln B$ and use the Ito's lemma \citep{ito} as follows
-\begin{equation}
-\label{ito}
-dG = \frac{\partial G}{\partial B} dB + \frac{1}{2}\pderiv[2]{G}{B} (dB)^2
-\end{equation}
-
-\begin{multline}
-\label{ito_calc}
-d(\ln B) = \frac{1}{B} \left ( r \cdot B \cdot dt + \sum \limits_p \sigma_p B \cdot dW_p \right ) 
-+ \frac{1}{2} \frac{1}{(-B^2)}\left ( r(t) B \cdot dt + \sum \limits_p \sigma_p B \cdot dW_p  \right )^2 \\
-= r \cdot dt + \sum \limits_p \sigma_p \cdot dW_p  - \frac{1}{2}  \left ( r^2 \cdot (dt)^2 + 2r \cdot dt \sum \limits_p \sigma_p \cdot dW_p  + \sum \limits_{p,p^{'}} \sigma_p \sigma_{p'} \cdot dW_p \cdot dW_{p'} \right ) \\
-= r \cdot dt +\sum \limits_p \sigma_p \cdot dW_p - \frac{1}{2}r^2 (dt)^2 - r \cdot dt \sum \limits_p \sigma_p \cdot dW_p - \frac{1}{2} \sum \limits_{p,p^{'}} \sigma_p \sigma_{p'} \cdot dW_p \cdot dW_{p'}
-\end{multline}  
-Note that processes $dW_p$ are correlated
-\begin{equation}
-\label{WWrho}
-\langle  dW_p(t) dW_{p'}(t) \rangle = \rho_{pp'}dt
-\end{equation}
-Keeping in the  equation (\ref {ito_calc})  only terms with degree of  $dt$ equal or less than $ 1$ we arrive to the following equation for the process $ \ln B(t,T)$:
-
-\begin{equation}
-\label{dlnB}
-d \ln B(t,T) = \left ( r(t) - \frac{1}{2} \sum \limits_{pp'}\sigma_p (t,T) \sigma_{p'} (t,T) \rho_{pp'} \right )dt+ \sum \limits_{p=0}^2 \sigma_p (t,T) dW_p (t,T)
-\end{equation}
-
-Integration of the equation (\ref{dlnB} from $s$ to $t$ leads to the integral expression of the bond price as a function of bond volatilities:
-\begin{equation}
-\label{logBtT}
- \ln B(t,T)- \ln B(s,T) = \int \limits_s^t \left ( r(q)  - \frac{1}{2}
-\sum \limits_{pp'} \rho_{pp'} \sigma_{p}(q,T) \sigma_{p'} (q,T) \right )  dq +
- \int \limits_s^t \sum \limits_p \sigma_{p}(q,T) dW_p(q) 
-\end{equation}
-or 
-\begin{equation}
-\label{BB}
- \frac{B(t,T)}{B(s,T)}= e^ {\int \limits_s^t \left ( r(q)  - \frac{1}{2}
-\sum \limits_{pp'} \rho_{ pp'} \sigma_{p}(q,T) \sigma_{p'} (q,T) \right )  dq +
- \int \limits_s^t \sum \limits_p \sigma_{p}(q,T) dW_p(q) }
-\end{equation}
-
-This equation can be further simplified as follows. The equation (\ref{BB}) with $T=t$ becomes:
-\begin{equation}
-\label{Btt}
- \frac{B(t,t)}{B(s,t)}= e^ {\int \limits_s^t \left ( r(q)  - \frac{1}{2}
-\sum \limits_{pp'} \rho_{ pp'} \sigma_{p}(q,t) \sigma_{p'} (q,t) \right )  dq +
- \int \limits_s^t \sum \limits_p \sigma_{p}(q,t) dW_p(q) }
-\end{equation}
-Combining (\ref{BB}) and (\ref{Btt}) we find (note that $B(t,t)=1$):
-\begin{equation}
-\label{BBB}
- B(t,T) = \frac{B(s,T)}{B(s,t)} e^ {\left \{ - \frac{1}{2}
-\sum \limits_{pp'} \rho_{ pp'} \int \limits_s^t  [ \sigma_{p}(q,T) \sigma_{p'} (q,T)  - \sigma_{p}(q,t) \sigma_{p'} (q,t) ]  dq +
- \int \limits_s^t \sum \limits_p (\sigma_{p}(q,T)- \sigma_{p}(q,t) ) dW_p(q) \right \}}
-\end{equation}
-In the last equation (\ref {BBB}) the bond price at time $t$ maturing at $T$ is expressed through correlation matrix $\hat {\rho}$, volatility functions $\sigma_p (t,T)$ and Wiener processes $dW_p(t)$.
-
-\subsection{Bond price and instantenious forward rate}
-
-The instantanious forward rate $f(t,u)$ is defined by the following expression
-
-\begin{equation}
-\label{Bef}
- B(t,T) = e^ { - \int \limits_t^T f(t,u) du }
-\end{equation}
-which is equivalent to 
-\begin{equation}
-\label{fB*}
- f(t,T) = \frac{\partial}{\partial t}   \ln B(t,T)
-\end{equation}
-
-The differential of $f(t,T)$ can be calculated using (\ref{fB*}) and ( \ref{dlnB}):
-
-\begin{multline}
-\label{df}
- df(t,T) = d \left ( \frac{\partial}{\partial t}   \ln B(t,T)    \right )= \frac{\partial}{\partial t} \left ( d \ln B(t,T)\right )= - \frac{\partial}{\partial T} \left ( d \ln B(t,T)\right ) \\
- = -\frac{\partial}{\partial T} \left [  r(t) \cdot dt - \frac{1}{2} \sum \limits_{pp'} \rho_{pp'} \sigma_p(t,T) \sigma_{p'} (t,T) dt  + \sum \limits_{p} \sigma_p (t,T)dW_p(t) \right ]
-\end{multline}
-The instantaneous forward rate volatility can be introduced as
-\begin{equation}
-\label{sdot}
-\dot {\sigma}_p(t,T) = \frac{\partial}{\partial T}   \sigma_p (t,T)
-\end{equation}
-or
-\begin{equation}
-\label{sB}
-\sigma_p (t,T) = \int \limits_t^T \dot {\sigma}_p(t,u) du   
-\end{equation}
-Substitution of $\sigma_p (t,T)$ in the equation (\ref{df}) with (\ref{sB})  leads to:
-\begin{multline}
-\label{dfsdot}
- df(t,T) = \frac{1}{2}\sum \limits_{pp'} \rho_{pp'} \left [ \frac{\partial {\sigma_p(t,T)}}{\partial T} \sigma_{p'}(t,T)+  \sigma_{p}(t,T)  \frac{\partial {\sigma_{p'}(t,T)}}{\partial T}  \right ]dt-\sum \limits_p \frac{\partial {\sigma_p(t,T)}}{\partial T} dW_p (t) \\
- = \sum \limits_{pp'} \rho_{pp'} \dot {\sigma}_p(t,T) \left ( \int \limits_t^T \dot {\sigma}_{p'}(t,u)du \right )dt-\sum \limits_p \dot {\sigma}_p(t,T)dW_p(t)
-\end{multline}
-Integrate (\ref{dfsdot}) by $t$ (from $s$ to $t$) and (for convenience) replace $T$ with $u$. We then have:
-\begin{equation}
-\label{ftu}
-f(t,u) - f(s,u) =  \sum \limits_{pp'} \rho_{pp'} \int \limits_s^t \dot {\sigma}_p(q,u) \left(\int \limits_q^u \dot {\sigma}_{p'}(q,v)dv \right)dq - \sum \limits_p \int \limits_s^t \dot {\sigma}_p(q,u)dW_p(q)
-\end{equation}
-Continue by integration the equation (\ref{ftu}) by $u$ from $t$ to $T$):
+\subsection{Neural Network Iteration (Learning) Algorithm}
+There are two data blocks: $N$ samples of learning (calibration) data and $N^*$ samples of validation data.
+\begin{enumerate}
+\item Generate random values for matrix $\textbf{w}$ and vector $\vec b$ as normal deviates
+\item Fill in the input layer ($l=0$) with input parameters $\vec x$:
 \begin{align}
-\nonumber & \int \limits_t^T f(t,u)du -  \int \limits_t^T f(s,u)du =  \\ 
-\label{intf_1}
-& \sum \limits_{pp'} \rho_{pp'}  \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u) \left(\int \limits_q^u \dot {\sigma}_{p'}(q,v)dv \right)dq - \sum \limits_p \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u)dW_p(q)
+ a_{n0j}&= x_{nj} \quad n=0\cdots N-1\\
+ a_{n0j}^*&= x_{nj}^*  \quad n=0\cdots N^*-1
 \end{align}
-
-It follows from (\ref{Bef}) that
+\end{enumerate}
+\subsubsection*{Iteration process p:}
+\begin{enumerate}
+\item
+Forward propagation through neural network:
 \begin{align}
-\nonumber  \int \limits_t^T f(t,u)du &=  -\ln B(t,T) \\
-\nonumber  \quad \text{and} \\
-\nonumber \int \limits_t^T f(s,u) du &=\int \limits_t^s f(s,u)du +  \int \limits_s^T f(s,u)du=-\int \limits_s^t f(s,u)du +  \int \limits_s^T f(s,u)du \\ 
-\label{fB_B3}
-& =\ln B(s,t) - \ln B(s,T)
+ z_{nlj}&= \sum_{k=0}^{J-1} a_{n,l-1,k} w_{lkj} + b_{lj}\\
+ a_{nlj}&= \sigma(z_{nlj})  \\
+ \nonumber n&=0\cdots (N-1), \quad  l=0\cdots (L-1), \quad j=0\cdots (J-1) \\
+  \nonumber \\
+ z_{nlj}^*&= \sum_{k=0}^{J-1} a_{n,l-1,k}^* w_{lkj} + b_{lj}\\
+ a_{nlj}^*&= \sigma(z_{nlj}^*)  \\
+ \nonumber n&=0\cdots (N^*-1), \quad  l=0\cdots (L-1), \quad j=0\cdots (J-1) 
 \end{align}
-
-Combining (\ref{intf_1}) with (\ref{fB_B3}) we find:
+\item Error values calculated:
 \begin{align}
-\nonumber -\ln B(t,T)&- \ln B(s,t) +\ln B(s,T)=  \\
-\label{Bs2}
-& \sum \limits_{pp'} \rho_{pp'} \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u) \left(\int \limits_q^u \dot {\sigma}_{p'}(q,v)dv \right)dq - \sum \limits_p \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u)dW_p(q)
+ E_p &= \frac{1}{2N}\sum_{n=0}^{N-1} \sum_{i=0}^{I-1} (a_{n,L-1,i} - y_{ni})^2\\
+ E_p^* &= \frac{1}{2N^*}\sum_{n=0}^{N^*-1} \sum_{i=0}^{I-1} (a^*_{n,L-1,i} - y^*_{ni})^2 \quad 
 \end{align}
-or, finally,
+\item Derivatives (by weighted average variables $\vec z$) of the error function $E$ are calculated:
 \begin{align}
-\nonumber &B(t,T)= \frac{B(s,T)}{B(s,t)} \exp \Big\{ \\
-\label{Bsexp2}
-& -\sum \limits_{pp'} \rho_{pp'} \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u) \left(\int \limits_q^u \dot {\sigma}_{p'}(q,v)dv \right)dq + \sum \limits_p \int \limits_t^T du \int \limits_s^t \dot {\sigma}_p(q,u)dW_p(q) \Big\}
+ \delta_{n,L-1,i} &= (a_{n,L-1,i} - y_{ni})\cdot \sigma^{'}(z_{n,L-1,i})\\
+ \nonumber  n&=0\cdots (N-1), \quad i=0\cdots (I) \\
+ \nonumber\\
+ \delta_{n,l,j} &=\sum_k \delta_{n,l+1,k} w_{j,l+1,k} \sigma^{'}(z_{nlj}) \\
+  \nonumber n&=0\cdots (N-1), \quad  l= (L-1)\cdots 1, \quad j=0\cdots (J-1) 
 \end{align}
-
-\subsection{Volatility model}
-It is common approach to assume that the volatility function is a decaying function of time \footnote{See \citep{chiarella}}
+\item Derivatives by bias parameters $\vec b$ (averaged over all samples) are calculated:
 \begin{align}
-\label{vol}
-\dot{\sigma}_p (q,r)&= \hat {\sigma}_p e^{-\kappa_p (r-q)} \\
-\sigma_p(t,T)&=\int \limits_t^T \dot{\sigma}_p(q,T) dq = \frac{\hat{\sigma}_p}{\kappa_p}\left(1-e^{-\kappa_p (T-t)} \right) \\
-\hat{\sigma}_p &= \textbf{const}
+\beta_{lj} &= \frac{1}{N}\sum_{n=0}^{N-1} \delta_{n,l,j}, \quad  l= 1 \cdots (L-1), \quad j=0\cdots (J-1) 
 \end{align}
-
-\subsection{Bond price model adapted to numerical simulation}
-Using (\ref{vol}) in (\ref{Bsexp2}) we obtain
+\item Derivatives by components of the matrix $\textbf{w}$ (averaged over all samples) are calculated:
 \begin{align}
-\nonumber &B(t,T)= \frac{B(s,T)}{B(s,t)} \exp \Big\{ \\
-\nonumber & -\sum \limits_{pp'} \rho_{pp'} \int \limits_t^T du \int \limits_s^t 
-\hat {\sigma}_p e^{-\kappa_p (u-q)}
-\left(\int \limits_q^u \hat {\sigma}_{p'}e^{-\kappa_{p'} (v-q)}dv \right)dq  \\
-\label{BFi}
-&+ \sum \limits_p \int \limits_t^T du \int \limits_s^t \hat {\sigma}_p e^{-\kappa_p (u-q)} dW_p(q) \Big\}
+v_{lkj} &= \frac{1}{N}\sum_{n=0}^{N-1} \delta_{nlj} a_{n,l-1,k} \\
+\nonumber  l &= 1 \cdots (L-1), \quad j=0 \cdots (J-1), \quad k=0 \cdots (J-1) 
 \end{align}
-Equation (\ref{BFi}) can now be used to build numerical simulation algorithm. It contains dependence of  bond prices at time $t$  for maturities $T$ on bond prices at previous time $s$ with the drift term $D(s,t,T)$ and the Brownian motion $\Phi (s,t,T)$ integral:
+\item Gradient descent step:
 \begin{align}
-\label{BBtBT}
-B(t,T)&= \frac{B(s,T)}{B(s,t)} e^{D(s,t,T)+\Phi (s,t,T)} \qquad \text{, where} \\
-\label{D}
-D(s,t,T)&= -\sum \limits_{pp'} \rho_{pp'} \int \limits_t^T du \int \limits_s^t 
-\hat {\sigma}_p e^{-\kappa_p (u-q)}
-\left(\int \limits_q^u \hat {\sigma}_{p'}e^{-\kappa_{p'} (v-q)}dv \right)dq  \\
-\label{Phi}
-\Phi (s,t,T)&= \sum \limits_p \int \limits_t^T du \int \limits_s^t \hat {\sigma}_p e^{-\kappa_p (u-q)} dW_p(q) 
+w_{lkj} &= w_{lkj} - h \cdot v_{lkj}\\
+b_{lj} &= b_{lj} - h \cdot \beta_{lj}\\
+\nonumber  l &= 1 \cdots (L-1), \quad j=0 \cdots (J-1), \quad k=0 \cdots (J-1) 
 \end{align}
+\end{enumerate}
+\subsubsection*{Next iteration p+1}
 
-\subsubsection{Drift Integral}
-The calculation of the drift integral (\ref{D}) is straitforward. The result is:
-\begin{align}
-\nonumber
-D(s,t,T)= \sum \limits_{pp'} \rho_{pp'} \frac{\hat {\sigma}_{p} \hat {\sigma}_{p'}}{\kappa_{p'}}\Big\{ 
-\frac{1-e^{-(\kappa_{p}+\kappa_{p'})(T-t)}+e^{-(\kappa_{p}+\kappa_{p'})(T-s)}-e^{-(\kappa_{p}+\kappa_{p'})(t-s)}}{(\kappa_{p}+\kappa_{p'})^2}& \\
-\label{DDD}
--\frac{1-e^{-\kappa_{p}(T-t)}+e^{-\kappa_{p}(T-s)}-e^{-\kappa_{p}(t-s)}}{(\kappa_{p})^2} \Big\}&
-\end{align}
+\section{Historical data preparation}
 
-\subsubsection{Brownian Motion Integral}
-The components $dW_p(t)$  of the Wiener process are correlated, therefore each of them  depends linearly on three independent normally distributed random drivers $\varepsilon_p$ :
-
-\begin{align}
-\label{Weps}
-dW_p(t)=\sum \limits_{p'} \gamma_{pp'}\varepsilon_{p'} \sqrt{dt} \\
-\nonumber \left\langle \varepsilon_{p}  \varepsilon_{p'}\right\rangle = \delta_{pp'} \qquad  \left\langle \varepsilon_{p}^2 \right\rangle =1 
-\end{align}
-where linear form $\boldsymbol\gamma$ can be derived from correlation matrix $\boldsymbol\rho$. From (\ref{WWrho}) and (\ref{Weps}) we find:
-
-\begin{align}
-\label{gammarho}
-\nonumber \left \langle W_{p}(q)W_{p'}(q) \right\rangle &= \left\langle \sum \limits_n \gamma_{pn} \varepsilon_n  \sqrt{dq} 
-\sum \limits_m \gamma_{p'm}\varepsilon_m \sqrt{dq} \right\rangle&=\sum \limits_n \gamma_{pn} \gamma_{p'n} dq = \rho_{pp'} dq \\
-\nonumber  \text{therefore} \\
-\sum \limits_n \gamma_{pn} \gamma_{p'n} &= \rho_{pp'}
-\end{align}
-Given correlation matrix $\boldsymbol\rho$, it follows from  (\ref{gammarho}) that:
-\begin{equation}
-\label{gamma}
-\boldsymbol\gamma =
-\begin{pmatrix}
-1 & 0 & 0 \\
-\rho_{01} & \sqrt{1-\rho_{01}^2} & 0 \\
-\rho_{02} & \frac{\rho_{12}-\rho_{01}\rho_{02} }{\sqrt{1-\rho_{01}^2}} & \sqrt{1-\rho_{02}^2-\frac{(\rho_{12}-\rho_{01}\rho_{02})^2}{1-\rho_{01}^2}}
-\end{pmatrix}
-\end{equation}
-
-The Brownian motion integral (\ref{Phi}) with account of (\ref{Weps}) and (\ref{gammarho}) takes the following form:
-\begin{equation}
-\label{PhiEps}
-\Phi (s,t,T)= \sum \limits_{pp'} \left(\gamma_{pp'} \hat {\sigma}_p \int \limits_t^T du \int \limits_s^t  e^{-\kappa_p (u-q)} \sqrt{dq} \right) \varepsilon_{p'} 
-\end{equation}
-
-The Brownian motion process (\ref{PhiEps})  is therefore a simple sum of three parts driven by Gaussian random drivers $\varepsilon_p$. To find corresponding volatilities we calculate the total variance of  the Brownian motion integral
-\begin{align}
-\nonumber &\left \langle \Phi (s,t,T) \Phi (s,t,T)\right\rangle =  \\
-\nonumber &= \left \langle  \sum \limits_{pp'} \left(\gamma_{pp'} \hat {\sigma}_p \int \limits_t^T du \int \limits_s^t  e^{-\kappa_p (u-q)} \sqrt{dq} \right) \varepsilon_{p'}    \cdot \sum \limits_{n p'} \left(\gamma_{n p'} \hat {\sigma}_n \int \limits_t^T du \int \limits_s^t  e^{-\kappa_n (u-q)} \sqrt{dq} \right) \varepsilon_{p'} \right\rangle \\
-\nonumber &= \sum \limits_{pp'n} \gamma_{pp'} \gamma_{np'} \hat {\sigma}_p \hat {\sigma}_n\int \limits_s^t \frac{e^{-\kappa_p(T-q)}-e^{-\kappa_p(t-q)}}{-\kappa_p} \cdot  \frac{e^{-\kappa_n(T-q)}-e^{-\kappa_n(t-q)}}{-\kappa_n}dq  \\
- &=\sum \limits_{n} v_n(s,t,T) 
-\end{align}
-where
-\begin{align}
-\nonumber &v_n(s,t,T)=\sum \limits_{pp'} \frac{ \gamma_{pn} \gamma_{p'n} \hat {\sigma}_p \hat {\sigma}_{p'}}{\kappa_p \kappa_{p'} (\kappa_p + \kappa_{p'})} \Big(  1+  e^{-(\kappa_{p}+ \kappa_{p'})(T-t)}- e^{-(\kappa_{p}+ \kappa_{p'})(T-s)}  - e^{-\kappa_{p}(T-t)}  \\
-\label{varn}
-&+ e^{-\kappa_{p}(T-s)-\kappa_{p'}(t-s)} - e^{-\kappa_{p'}(T-t)}+ e^{-\kappa_{p}(t-s)-\kappa_{p'}(T-s)} -e^{-(\kappa_{p}+ \kappa_{p'})(t-s)} \Big) 
-\end{align}
-is the variance of the $n^{th}$ factor of the Brownian motion integral.
-
-\subsubsection{HJM Bond Price simulation formula}
-Equations   (\ref{BBtBT}), (\ref{DDD}), (\ref{varn}), derived above, provide basis for numerical bond price simulation in the following form
-
-\begin{align}
-\label{formulaB}
-\ln B(t,T) = \ln B(s,T) - \ln B(s,t) + D(s,t,T) + \sum \limits_{n=0}^2 \sqrt{v_n(s,t,T)} \cdot \varepsilon_n (t)
-\end{align}
-with sufficiently small time step $dt = t - s$ (1 day, for example).
-\begin{flushright}
-\begin{flushright}
-•
-\end{flushright}
-\end{flushright}
-The interest rate $r_t$ at time $t$ (time to maturity $T-t$ ) and the zero-coupon bond value are related as 
-\begin{equation}
-\label{i_rate}
-B(t,T) = \frac{1}{(1+r_t)^{T-t}}   
-\end{equation}
-therefore yield rates at time $t$ for maturity $\tau = T-t$ are calculated as 
-
-
-\begin{tcolorbox}
-\begin{equation}
-\label{i_rate}
-r_{\tau}(t) = e^ {  - \ln B(t,T) / (T-t)}-1
-\end{equation}
-\end{tcolorbox}
-
+\newpage
 \section{Dual Currency Curve Simulation} \label{dual}
 Discount factors for both yield curves (we will use the notation of $A$ and $B$ (the first yield curve, or "base" curve: $A$, and the second yield curve, or "quoted" curve: $B$) must be simulated simultaneously with account of their correlation. Each random driver $\varepsilon_n^{'}$ for curve $A$ is correlated to corresponding driver $\varepsilon_n^{"}$ for curve $B$. Therefore the dual-curve model takes the following form (see equation \ref{formulaB} for zero-coupon-bond values $B(t,T)$):
 
